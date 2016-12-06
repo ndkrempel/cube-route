@@ -1,5 +1,8 @@
 'use strict';
 
+const EDGES_HEIGHT = 100;
+const LINES_SIZE = 200;
+
 async(function *main() {
   const thresholdElt = document.getElementById('threshold'),
       thresholdOutElt = document.getElementById('thresholdOut'),
@@ -8,21 +11,26 @@ async(function *main() {
     video: true,
   });
   // TODO: Could there be more than 1 track?
-  const settings = stream.getVideoTracks()[0].getSettings();
+  // const settings = stream.getVideoTracks()[0].getSettings();
   const videoElt = document.createElement('video');
   videoElt.autoplay = true;
   videoElt.srcObject = stream;
   document.body.append(videoElt);
+
+  yield new Promise(_ => videoElt.addEventListener('playing', _));
+  const settings = {width: videoElt.videoWidth, height: videoElt.videoHeight};
+  console.log(settings);
+
   const canvasElt = document.createElement('canvas');
   canvasElt.mozOpaque = true;
-  canvasElt.width = Math.round(100 * settings.width / settings.height);
-  canvasElt.height = 100;
+  canvasElt.width = Math.round(EDGES_HEIGHT * settings.width / settings.height);
+  canvasElt.height = EDGES_HEIGHT;
   document.body.append(canvasElt);
   const context = canvasElt.getContext('2d');
   const canvasElt2 = document.createElement('canvas');
   canvasElt2.mozOpaque = true;
-  canvasElt2.width = 20;
-  canvasElt2.height = 20;
+  canvasElt2.width = LINES_SIZE;
+  canvasElt2.height = LINES_SIZE;
   document.body.append(canvasElt2);
   const context2 = canvasElt2.getContext('2d');
   setTimeout(function update() {
@@ -34,14 +42,24 @@ async(function *main() {
     detectEdges(output, frame, threshold);
     const endTime = performance.now();
     context.putImageData(output, 0, 0);
-    const output2 = context2.createImageData(20, 20);
+    const output2 = context2.createImageData(LINES_SIZE, LINES_SIZE);
     const startTime2 = performance.now();
-    detectLines(output2, output);
+    const lines = detectLines(output2, output);
     const endTime2 = performance.now();
     context2.putImageData(output2, 0, 0);
+    for (const [index, line] of lines.entries()) {
+      context.beginPath();
+      const cos = Math.cos(line[0]), sin = Math.sin(line[0]),
+          t = Math.max(frame.width, frame.height);
+      context.moveTo(-cos * t - sin * line[1], -sin * t + cos * line[1]);
+      context.lineTo(cos * t - sin * line[1], sin * t + cos * line[1]);
+      const color = Math.min(index / 40, 0.8);
+      context.strokeStyle = `rgba(255,0,${Math.floor(color * 256)},${1 - color})`;
+      context.stroke();
+    }
     thresholdOutElt.innerText = threshold;
     timingOutElt.innerText = `edges: ${Math.round(endTime - startTime)} ms | lines: ${Math.round(endTime2 - startTime2)} ms`;
-    setTimeout(update, 100);
+    setTimeout(update, 10);
   }, 0);
 })();
 
@@ -66,12 +84,12 @@ function detectEdges(output, input, threshold = 20) {
     }
 }
 
-function detectLines(output, input) {
+function detectLines(output, input, threshold = 0.6) {
   const {width, height} = input,
       {width: angleSteps, height: distanceSteps} = output,
       diagonal = Math.hypot(width, height),
       angleScale = Math.PI / angleSteps,
-      distanceScale = distanceSteps / diagonal,
+      distanceScale = distanceSteps / (diagonal * 2),
       angleVectors = Array(angleSteps);
   for (let i = 0, theta = 0; i < angleSteps; ++i, theta += angleScale) {
     const cos = Math.cos(theta), sin = Math.sin(theta);
@@ -82,9 +100,10 @@ function detectLines(output, input) {
   for (let offset = 0, y = 0; y < height; ++y)
     for (let x = 0; x < width; ++x, offset += 4)
       for (let i = 0; i < angleSteps; ++i) {
-        const d = angleVectors[0] * y - angleVectors[1] * x;
-        const offset = d * (d >= 0 ? angleVectors[3] : angleVectors[2]);
-        const j = Math.round((d - offset) * distanceScale);
+        const angleVector = angleVectors[i];
+        const d = angleVector[0] * y - angleVector[1] * x;
+        // const offset = d * (d >= 0 ? angleVector[3] : angleVector[2]);
+        let j = Math.round(d * distanceScale + distanceSteps / 2);
         if (j < 0) {
           console.log('j < 0', j);
           j = 0;
@@ -95,18 +114,28 @@ function detectLines(output, input) {
         }
         const index = j * angleSteps + i;
         ++total[index];
-        if (input.data[offset])
+        if (!input.data[offset])
           ++accumulator[index];
       }
-    for (let index = 0, i = 0; i < angleSteps; ++i)
-       for (let j = 0; j < distanceSteps; ++j, index += 1) {
-         const offset = index * 4;
-         if (total[index])
-          output.data[offset] = output.data[offset + 1] = output.data[offset + 2] = Math.round(accumulator[index] / total[index] * 255);
-        else
-          [output.data[offset], output.data[offset + 1], output.data[offset + 2]] = [255, 0, 0];
-        output.data[offset + 3] = 255;
-       }
+  const lines = [];
+  for (let index = 0, j = 0; j < distanceSteps; ++j)
+    for (let i = 0; i < angleSteps; ++i, ++index) {
+      const offset = index * 4;
+      if (total[index]) {
+        const value = accumulator[index] / total[index];
+        const hit = total[index] > 10 && value > threshold;
+        if (hit)
+          lines.push([i, j, value]);
+        output.data[offset] = output.data[offset + 1] = output.data[offset + 2] = Math.floor(value / threshold * 256);
+        if (hit)
+          output.data[offset + 1] = 0
+      }
+      else
+        [output.data[offset], output.data[offset + 1], output.data[offset + 2]] = [255, 0, 0];
+      output.data[offset + 3] = 255;
+    }
+  return lines.map(_ => [_[0] * angleScale, (_[1] - distanceSteps / 2) / distanceScale, _[2]])
+    .sort((a, b) => b[2] - a[2]);
 }
 
 function colorDistance(color1, color2) {
