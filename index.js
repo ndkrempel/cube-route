@@ -4,9 +4,14 @@ const EDGES_HEIGHT = 100;
 const LINES_SIZE = 200;
 
 async(function *main() {
-  const thresholdElt = document.getElementById('threshold'),
-      thresholdOutElt = document.getElementById('thresholdOut'),
-      timingOutElt = document.getElementById('timingOut');
+  const edgeThresholdElt = document.getElementById('edgeThreshold'),
+      edgeThresholdOutElt = document.getElementById('edgeThresholdOut'),
+      lineThresholdElt = document.getElementById('lineThreshold'),
+      lineThresholdOutElt = document.getElementById('lineThresholdOut'),
+      clusterThresholdElt = document.getElementById('clusterThreshold'),
+      clusterThresholdOutElt = document.getElementById('clusterThresholdOut'),
+      timingOutElt = document.getElementById('timingOut'),
+      colorsOutElt = document.getElementById('colorsOut');
   const stream = yield navigator.mediaDevices.getUserMedia({
     video: true,
   });
@@ -27,9 +32,10 @@ async(function *main() {
   }
   console.log(settings);
 
+  const scaleFactor = EDGES_HEIGHT / settings.height;
   const canvasElt = document.createElement('canvas');
   canvasElt.mozOpaque = true;
-  canvasElt.width = Math.round(EDGES_HEIGHT * settings.width / settings.height);
+  canvasElt.width = Math.round(scaleFactor * settings.width);
   canvasElt.height = EDGES_HEIGHT;
   document.body.append(canvasElt);
   const context = canvasElt.getContext('2d');
@@ -39,57 +45,97 @@ async(function *main() {
   canvasElt2.height = LINES_SIZE;
   document.body.append(canvasElt2);
   const context2 = canvasElt2.getContext('2d');
+  const canvasElt3 = document.createElement('canvas');
+  canvasElt3.mozOpaque = true;
+  canvasElt3.width = settings.width;
+  canvasElt3.height = settings.height;
+  document.body.append(canvasElt3);
+  const context3 = canvasElt3.getContext('2d');
   setTimeout(function update() {
-    const threshold = thresholdElt.value;
+    const edgeThreshold = edgeThresholdElt.value,
+        lineThreshold = lineThresholdElt.value,
+        clusterThreshold = clusterThresholdElt.value;
     context.drawImage(videoElt, 0, 0, canvasElt.clientWidth, canvasElt.clientHeight);
     const frame = context.getImageData(0, 0, canvasElt.clientWidth, canvasElt.clientHeight),
         output = context.createImageData(frame.width, frame.height);
     const startTime = performance.now();
-    detectEdges(output, frame, threshold);
+    detectEdges(output, frame, edgeThreshold);
     const endTime = performance.now();
     context.putImageData(output, 0, 0);
     const output2 = context2.createImageData(LINES_SIZE, LINES_SIZE);
     const startTime2 = performance.now();
-    const lines = detectLines(output2, output);
+    const lines = detectLines(output2, output, lineThreshold);
     const endTime2 = performance.now();
     context2.putImageData(output2, 0, 0);
     const startTime3 = performance.now();
-    const clusters = clusterLines(lines, 0.1);
+    const clusters = clusterLines(lines, clusterThreshold);
     const endTime3 = performance.now();
-    for (const [index, cluster] of clusters.entries()) {
-      const max = Math.max(...cluster.map(_ => _[2]));
-      for (const line of cluster) {
-        context.beginPath();
-        const cos = Math.cos(line[0]), sin = Math.sin(line[0]),
-            t = Math.max(frame.width, frame.height);
-        context.moveTo(-cos * t - sin * line[1], -sin * t + cos * line[1]);
-        context.lineTo(cos * t - sin * line[1], sin * t + cos * line[1]);
-        context.strokeStyle = `rgba(${hue(index / clusters.length)},${line[2] === max ? 1 : 0.2})`;
-        context.stroke();
+    /*
+    for (const [index, cluster] of clusters.entries())
+      for (const line of cluster)
+        plotLine(line, 1, hue(index / clusters.length), 0.2);
+    */
+    // const clusters2 = clusters.map(_ => _.reduce((a, b) => a[2] > b[2] ? a : b));
+    const clusters2 = clusters.map(lineAverage);
+    for (const [index, line] of clusters2.entries())
+      plotLine(line, 2, [128, 128, 128]);
+    const startTime4 = performance.now();
+    const grid = detectGrid(clusters2, 0.2, 20, 4);
+    const endTime4 = performance.now();
+    for (const [index, parallels] of grid.entries())
+      for (const [i, line] of Object.entries(parallels))
+        plotLine(line, 2, hue(index / grid.length));
+    if (grid.length === 2 && grid[0].length === 4 && grid[1].length === 4) {
+      /*
+      const canvasElt3 = document.createElement('canvas');
+      canvasElt3.mozOpaque = true;
+      canvasElt3.width = settings.width;
+      canvasElt3.height = settings.height;
+      // document.body.append(canvasElt3);
+      const context3 = canvasElt3.getContext('2d');
+      context3.drawImage(videoElt, 0, 0, settings.width, settings.height);
+      const frame2 = context3.getImageData(0, 0, settings.width, settings.height);
+      */
+      context3.drawImage(videoElt, 0, 0, canvasElt3.clientWidth, canvasElt3.clientHeight);
+      const frame2 = context3.getImageData(0, 0, canvasElt3.clientWidth, canvasElt3.clientHeight);
+      const colors = sampleGrid(frame2, grid, scaleFactor);
+      context3.putImageData(frame2, 0, 0);
+      // context.drawImage(canvasElt3, 0, 0, canvasElt.clientWidth, canvasElt.clientHeight);
+      colorsOutElt.innerHTML = '';
+      for (let i = 0; i < colors.length; ++i) {
+        const row = colors[i],
+            rowElt = document.createElement('tr');
+        for (let j = 0; j < row.length; ++j) {
+          const cellElt = document.createElement('td');
+          cellElt.style.width = cellElt.style.height = '20px';
+          cellElt.style.background = `rgb(${row[j] || [0, 0, 0]})`;
+          rowElt.appendChild(cellElt);
+        }
+        colorsOutElt.appendChild(rowElt);
       }
     }
-/*
-    for (const [index, line] of lines.entries()) {
+    edgeThresholdOutElt.innerText = edgeThreshold;
+    lineThresholdOutElt.innerText = lineThreshold;
+    clusterThresholdOutElt.innerText = clusterThreshold;
+    timingOutElt.innerText = `edges: ${Math.round(endTime - startTime)} ms | lines: ${Math.round(endTime2 - startTime2)} ms (${lines.length}) | clusters: ${Math.round(endTime3 - startTime3)} ms (${clusters.length}) | grid ${Math.round(endTime4 - startTime4)} ms (${grid.map(_ => _.length)})`;
+    setTimeout(update, 10);
+
+    function plotLine(line, width = 1, color = [0, 0, 0], alpha = 1) {
       context.beginPath();
       const cos = Math.cos(line[0]), sin = Math.sin(line[0]),
           t = Math.max(frame.width, frame.height);
       context.moveTo(-cos * t - sin * line[1], -sin * t + cos * line[1]);
       context.lineTo(cos * t - sin * line[1], sin * t + cos * line[1]);
-      const color = Math.min(index / 40, 0.8);
-      context.strokeStyle = `rgba(255,0,${Math.floor(color * 256)},${1 - color})`;
+      context.lineWidth = width;
+      context.strokeStyle = `rgba(${color},${alpha})`;
       context.stroke();
     }
-*/
-    thresholdOutElt.innerText = threshold;
-    timingOutElt.innerText = `edges: ${Math.round(endTime - startTime)} ms | lines: ${Math.round(endTime2 - startTime2)} ms | clusters: ${Math.round(endTime3 - startTime3)} ms (${clusters.length})`;
-    setTimeout(update, 10);
   }, 0);
 })();
 
 function detectEdges(output, input, threshold = 20) {
   const {width, height} = input;
-  let offset = 0;
-  for (let y = 0; y < height; ++y)
+  for (let offset = 0, y = 0; y < height; ++y)
     for (let x = 0; x < width; ++x, offset += 4) {
       let edge = false;
       if (y > 0 && y < height - 1 && x > 0 && x < width - 1) {
@@ -177,8 +223,112 @@ function clusterLines(lines, threshold) {
   return clusters.map(cluster => cluster.map(_ => lines[_]));
 }
 
+function detectGrid(lines, angleThreshold, distanceThreshold, minParallels) {
+  const grid = [];
+  for (const line of lines) {
+    const mates = lines.filter(_ => angleDistance(_[0], line[0]) <= angleThreshold);
+    mateLoop: for (const mate of mates) {
+      if (mate === line)
+        continue;
+      let d = Math.abs(line[0] - mate[0]) <= Math.PI / 2 ? line[1] - mate[1] : line[1] + mate[1];
+      if (d <= 0)
+        continue;
+      const parallels = [];
+      let count = 0;
+      for (const parallel of mates) {
+        const d2 = Math.abs(line[0] - parallel[0]) <= Math.PI / 2 ? line[1] - parallel[1] : line[1] + parallel[1];
+        // const d2 = line[1] - parallel[1];
+        if (d2 < 0)
+          continue;
+        const t = d2 / d,
+            i = Math.round(t);
+        if (Math.abs(t - i) <= distanceThreshold && !parallels[i])
+          parallels[i] = parallel, ++count;
+      }
+      if (count < minParallels)
+        continue;
+      for (let i = 0; i < minParallels; ++i)
+        if (!parallels[i])
+          continue mateLoop;
+      grid.push(parallels);
+    }
+  }
+  return grid;
+}
+
+function sampleGrid(input, grid, scaleFactor) {
+  const {width, height} = input,
+      colors = Array(grid[0].length - 1);
+  for (let i = 0; i < grid[0].length - 1; ++i) {
+    colors[i] = Array(grid[1].length - 1)
+    for (let j = 0; j < grid[1].length - 1; ++j)
+      colors[i][j] = [0, 0, 0, 0];
+  }
+  const angleVectors = grid.map(_ => _.map(line => [Math.cos(line[0]), Math.sin(line[0])]));
+  for (let offset = 0, y = 0; y < height; ++y)
+    for (let x = 0; x < width; ++x, offset += 4) {
+      const coordinates = [];
+      for (const [index, parallels] of grid.entries()) {
+        coordinates[index] = -1;
+        for (const [index2, lines] of Object.entries(parallels)) {
+          const angleVector = angleVectors[index][index2],
+              d = angleVector[0] * y - angleVector[1] * x;
+          // TODO: Fix inequality.
+          if (d * scaleFactor < lines[1])
+            coordinates[index] = +index2;
+        }
+      }
+      const [i, j] = coordinates;
+      if (i < 0 || i >= grid[0].length - 1 || j < 0 || j >= grid[1].length - 1) {
+        /*
+        input.data[offset] = 0;
+        input.data[offset + 1] = 0;
+        input.data[offset + 2] = 0;
+        input.data[offset + 3] = 255;
+        */
+        continue;
+      }
+      const color = colors[i][j];
+      color[0] += input.data[offset];
+      color[1] += input.data[offset + 1];
+      color[2] += input.data[offset + 2];
+      ++color[3];
+
+      const foo = hue((j * (grid[0].length - 1) + i) / ((grid[0].length - 1) * (grid[1].length - 1)));
+      input.data[offset] = foo[0];
+      input.data[offset + 1] = foo[1];
+      input.data[offset + 2] = foo[2];
+      input.data[offset + 3] = 255;
+    }
+  return colors.map(_ => _.map(_ => _[3]
+      ? [Math.round(_[0] / _[3]), Math.round(_[1] / _[3]), Math.round(_[2] / _[3])]
+      : undefined));
+}
+
 function lineAverage(lines) {
-  // TODO
+  let angles = lines.map(_ => _[0]);
+  if (Math.max(...angles) - Math.min(...angles) < Math.PI / 2)
+    return average(lines);
+  const transformed = lines.map(_ => _[0] < Math.PI / 2
+      ? [_[0] + Math.PI / 2, -_[1], _[2]]
+      : [_[0] - Math.PI / 2, _[1], _[2]]),
+      result = average(transformed);
+  angles = transformed.map(_ => _[0]);
+  if (Math.max(...angles) - Math.min(...angles) >= Math.PI / 2)
+    throw 'Wide average';
+  return result[0] < Math.PI / 2
+      ? [result[0] + Math.PI / 2, result[1], result[2]]
+      : [result[0] - Math.PI / 2, -result[1], result[2]];
+
+  function average(lines) {
+    const sum = [0, 0, 0];
+    for (const line of lines) {
+      sum[0] += line[2] * line[0];
+      sum[1] += line[2] * line[1];
+      sum[2] += line[2];
+    }
+    return [sum[0] / sum[2], sum[1] / sum[2], sum[2]];
+  }
 }
 
 function lineDistance(line1, line2, scale = 100) {
@@ -189,6 +339,11 @@ function lineDistance(line1, line2, scale = 100) {
     d1 = Math.hypot(da1, dd1 / scale),
     d2 = Math.hypot(da2, dd2 / scale);
   return Math.min(d1, d2);
+}
+
+function angleDistance(angle1, angle2) {
+  const d = Math.abs(angle1 - angle2);
+  return d <= Math.PI / 2 ? d : Math.PI - d;
 }
 
 function colorDistance(color1, color2) {
