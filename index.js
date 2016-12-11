@@ -156,7 +156,7 @@ function clusterLines(lines, threshold) {
   const clusters = [],
       size = lines.length,
       clusterMap = Array(size);
-  outer: for (var i = 0; i < size; ++i)
+  outer: for (var i = 0; i < size; ++i) {
     for (var j = 0; j < i; ++j)
       if (lineDistance(lines[i], lines[j]) <= threshold) {
         (clusterMap[i] = clusterMap[j]).push(i);
