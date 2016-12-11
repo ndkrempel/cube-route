@@ -57,13 +57,14 @@ async(function *main() {
     const clusters = clusterLines(lines, 0.1);
     const endTime3 = performance.now();
     for (const [index, cluster] of clusters.entries()) {
+      const max = Math.max(...cluster.map(_ => _[2]));
       for (const line of cluster) {
         context.beginPath();
         const cos = Math.cos(line[0]), sin = Math.sin(line[0]),
             t = Math.max(frame.width, frame.height);
         context.moveTo(-cos * t - sin * line[1], -sin * t + cos * line[1]);
         context.lineTo(cos * t - sin * line[1], sin * t + cos * line[1]);
-        context.strokeStyle = `rgba(${hue(index / clusters.length)},1)`;
+        context.strokeStyle = `rgba(${hue(index / clusters.length)},${line[2] === max ? 1 : 0.2})`;
         context.stroke();
       }
     }
