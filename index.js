@@ -14,16 +14,16 @@ async(function *main() {
   // const settings = stream.getVideoTracks()[0].getSettings();
   let settings;
   const videoTracks = stream.getVideoTracks();
-  if (videoTracks[0] && typeof videoTracks[0].getSettings === 'function')
+  if (videoTracks[0] && videoTracks[0].getSettings)
     settings = videoTracks[0].getSettings();
   const videoElt = document.createElement('video');
   videoElt.autoplay = true;
   videoElt.srcObject = stream;
   document.body.append(videoElt);
 
-  if (settings === undefined) {
+  if (!settings) {
     yield new Promise(_ => videoElt.addEventListener('playing', _));
-    const settings = {width: videoElt.videoWidth, height: videoElt.videoHeight};
+    settings = {width: videoElt.videoWidth, height: videoElt.videoHeight};
   }
   console.log(settings);
 
