@@ -47,6 +47,19 @@ async(function *main() {
     const lines = detectLines(output2, output);
     const endTime2 = performance.now();
     context2.putImageData(output2, 0, 0);
+    const clusters = clusterLines(lines, 0.1);
+    for (const [index, cluster] of clusters.entries()) {
+      for (const line of cluster) {
+        context.beginPath();
+        const cos = Math.cos(line[0]), sin = Math.sin(line[0]),
+            t = Math.max(frame.width, frame.height);
+        context.moveTo(-cos * t - sin * line[1], -sin * t + cos * line[1]);
+        context.lineTo(cos * t - sin * line[1], sin * t + cos * line[1]);
+        context.strokeStyle = `rgba(${hue(index / clusters.length)},1)`;
+        context.stroke();
+      }
+    }
+/*
     for (const [index, line] of lines.entries()) {
       context.beginPath();
       const cos = Math.cos(line[0]), sin = Math.sin(line[0]),
@@ -57,6 +70,7 @@ async(function *main() {
       context.strokeStyle = `rgba(255,0,${Math.floor(color * 256)},${1 - color})`;
       context.stroke();
     }
+*/
     thresholdOutElt.innerText = threshold;
     timingOutElt.innerText = `edges: ${Math.round(endTime - startTime)} ms | lines: ${Math.round(endTime2 - startTime2)} ms`;
     setTimeout(update, 10);
@@ -84,7 +98,7 @@ function detectEdges(output, input, threshold = 20) {
     }
 }
 
-function detectLines(output, input, threshold = 0.6) {
+function detectLines(output, input, threshold = 0.6, minContribution = 10) {
   const {width, height} = input,
       {width: angleSteps, height: distanceSteps} = output,
       diagonal = Math.hypot(width, height),
@@ -123,7 +137,7 @@ function detectLines(output, input, threshold = 0.6) {
       const offset = index * 4;
       if (total[index]) {
         const value = accumulator[index] / total[index];
-        const hit = total[index] > 10 && value > threshold;
+        const hit = total[index] >= minContribution && value >= threshold;
         if (hit)
           lines.push([i, j, value]);
         output.data[offset] = output.data[offset + 1] = output.data[offset + 2] = Math.floor(value / threshold * 256);
@@ -138,12 +152,55 @@ function detectLines(output, input, threshold = 0.6) {
     .sort((a, b) => b[2] - a[2]);
 }
 
+function clusterLines(lines, threshold) {
+  const clusters = [],
+      size = lines.length,
+      clusterMap = Array(size);
+  outer: for (var i = 0; i < size; ++i)
+    for (var j = 0; j < i; ++j)
+      if (lineDistance(lines[i], lines[j]) <= threshold) {
+        (clusterMap[i] = clusterMap[j]).push(i);
+        continue outer;
+      }
+    clusters.push(clusterMap[i] = [i]);
+  }
+  return clusers.map(cluster => lineAverage(cluster.map(_ => lines[_])));
+}
+
+function lineAverage(lines) {
+  // TODO
+}
+
+function lineDistance(line1, line2, scale = 100) {
+  const da1 = Math.abs(line1[0] - line2[0]),
+    dd1 = line1[1] - line2[1],
+    da2 = da1 - Math.PI;
+    dd2 = line1[1] + line2[1],
+    d1 = Math.hypot(da1, dd1 / scale),
+    d2 = Math.hypot(da2, dd2 / scale);
+  return Math.min(d1, d2);
+}
+
 function colorDistance(color1, color2) {
   return Math.hypot(color1[0] - color2[0], color1[1] - color2[1], color1[2] - color2[2]);
 }
 
 function readPixel(bitmap, offset) {
   return [bitmap[offset], bitmap[offset + 1], bitmap[offset + 2]];
+}
+
+function hue(hue) {
+  hue = (hue % 1) * 6;
+  const sextant = Math.floor(hue),
+      t = Math.floor((hue - sextant) * 256);
+  switch (sextant) {
+    case 0: return [255, t, 0];
+    case 1: return [255 - t, 255, 0];
+    case 2: return [0, 255, t];
+    case 3: return [0, 255 - t, 255];
+    case 4: return [t, 0, 255];
+    case 5: return [255, 0, 255 - t];
+  }
 }
 
 /*
