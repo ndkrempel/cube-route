@@ -12,13 +12,19 @@ async(function *main() {
   });
   // TODO: Could there be more than 1 track?
   // const settings = stream.getVideoTracks()[0].getSettings();
+  let settings;
+  const videoTracks = stream.getVideoTracks();
+  if (videoTracks[0] && videoTracks[0].getSettings)
+    settings = videoTracks[0].getSettings();
   const videoElt = document.createElement('video');
   videoElt.autoplay = true;
   videoElt.srcObject = stream;
   document.body.append(videoElt);
 
-  yield new Promise(_ => videoElt.addEventListener('playing', _));
-  const settings = {width: videoElt.videoWidth, height: videoElt.videoHeight};
+  if (settings === undefined) {
+    yield new Promise(_ => videoElt.addEventListener('playing', _));
+    const settings = {width: videoElt.videoWidth, height: videoElt.videoHeight};
+  }
   console.log(settings);
 
   const canvasElt = document.createElement('canvas');
@@ -47,7 +53,9 @@ async(function *main() {
     const lines = detectLines(output2, output);
     const endTime2 = performance.now();
     context2.putImageData(output2, 0, 0);
+    const startTime3 = performance.now();
     const clusters = clusterLines(lines, 0.1);
+    const endTime3 = performance.now();
     for (const [index, cluster] of clusters.entries()) {
       for (const line of cluster) {
         context.beginPath();
@@ -72,7 +80,7 @@ async(function *main() {
     }
 */
     thresholdOutElt.innerText = threshold;
-    timingOutElt.innerText = `edges: ${Math.round(endTime - startTime)} ms | lines: ${Math.round(endTime2 - startTime2)} ms`;
+    timingOutElt.innerText = `edges: ${Math.round(endTime - startTime)} ms | lines: ${Math.round(endTime2 - startTime2)} ms | clusters: ${Math.round(endTime3 - startTime3)} ms (${clusters.length})`;
     setTimeout(update, 10);
   }, 0);
 })();
@@ -164,7 +172,8 @@ function clusterLines(lines, threshold) {
       }
     clusters.push(clusterMap[i] = [i]);
   }
-  return clusters.map(cluster => lineAverage(cluster.map(_ => lines[_])));
+  // return clusters.map(cluster => lineAverage(cluster.map(_ => lines[_])));
+  return clusters.map(cluster => cluster.map(_ => lines[_]));
 }
 
 function lineAverage(lines) {
