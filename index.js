@@ -175,7 +175,7 @@ function lineDistance(line1, line2, scale = 100) {
   const da1 = Math.abs(line1[0] - line2[0]),
     dd1 = line1[1] - line2[1],
     da2 = da1 - Math.PI,
-    dd2 = line1[1] + line2[1];
+    dd2 = line1[1] + line2[1],
     d1 = Math.hypot(da1, dd1 / scale),
     d2 = Math.hypot(da2, dd2 / scale);
   return Math.min(d1, d2);
