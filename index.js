@@ -12,7 +12,10 @@ async(function *main() {
   });
   // TODO: Could there be more than 1 track?
   // const settings = stream.getVideoTracks()[0].getSettings();
-  let settings = stream.getVideoTracks()[0].getSettings();
+  let settings;
+  const videoTracks = stream.getVideoTracks();
+  if (videoTracks[0] && typeof videoTracks[0].getSettings === 'function')
+    settings = videoTracks[0].getSettings();
   const videoElt = document.createElement('video');
   videoElt.autoplay = true;
   videoElt.srcObject = stream;
