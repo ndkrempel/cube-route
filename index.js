@@ -164,7 +164,7 @@ function clusterLines(lines, threshold) {
       }
     clusters.push(clusterMap[i] = [i]);
   }
-  return clusers.map(cluster => lineAverage(cluster.map(_ => lines[_])));
+  return clusters.map(cluster => lineAverage(cluster.map(_ => lines[_])));
 }
 
 function lineAverage(lines) {
