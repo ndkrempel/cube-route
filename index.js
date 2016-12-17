@@ -103,7 +103,7 @@ async(function *main() {
       context3.drawImage(videoElt, 0, 0, canvasElt3.clientWidth, canvasElt3.clientHeight);
       const frame2 = context3.getImageData(0, 0, canvasElt3.clientWidth, canvasElt3.clientHeight);
       const colors = sampleGrid(frame2, grid, scaleFactor);
-      context3.putImageData(frame2, 0, 0);
+      // context3.putImageData(frame2, 0, 0);
 
       if (inView) {
         quads.forEach(_ => _.forEach(quad => {
@@ -116,7 +116,7 @@ async(function *main() {
           for (let i = 1; i < quad.length; ++i)
             context3.lineTo(quad[i][0], quad[i][1]);
           context3.closePath();
-          const hue = samplePath(context3, frame, clipBox(boundingBox(quad), frame.width, frame.height));
+          const hue = samplePath(context3, frame2, clipBox(boundingBox(quad), frame2.width, frame2.height));
           context3.fillStyle = (() => {
             switch (hue) {
               case 'black': return 'black';
