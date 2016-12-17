@@ -83,9 +83,13 @@ async(function *main() {
     const grid = detectGrid(clusters2, 0.2, 20, 4);
     const endTime4 = performance.now();
     for (const [index, parallels] of grid.entries())
-      for (const [i, line] of Object.entries(parallels))
+      for (const line of Object.values(parallels))
         plotLine(line, 2, hue(index / grid.length));
     if (grid.length === 2 && grid[0].length === 4 && grid[1].length === 4) {
+      const quads = gridToQuads(grid[0], grid[1]),
+          inView = quads.every(_ => _.every(_ => _.some(_ =>
+            _[0] >= 0 && _[0] < frame.width && _[1] >= 0 && _[1] < frame.height
+          )));
       /*
       const canvasElt3 = document.createElement('canvas');
       canvasElt3.mozOpaque = true;
@@ -100,6 +104,24 @@ async(function *main() {
       const frame2 = context3.getImageData(0, 0, canvasElt3.clientWidth, canvasElt3.clientHeight);
       const colors = sampleGrid(frame2, grid, scaleFactor);
       context3.putImageData(frame2, 0, 0);
+      
+      console.log(quads, inView);
+
+      if (inView) {
+        quads.forEach(_ => _.forEach(quad => {
+          for (let i = 0; i < quad.length; ++i)
+            quad[i][0] *= scaleFactor, quad[i][1] *= scaleFactor;
+          scale(quad, 0.9);
+          context3.beginPath();
+          context3.moveTo(quad[0][0], quad[0][1]);
+          for (let i = 1; i < quad.length; ++i)
+            context3.lineTo(quad[i][0], quad[i][1]);
+          context3.closePath();
+          context3.fillStyle = 'black';
+          context3.fill();
+        }));
+      }
+
       // context.drawImage(canvasElt3, 0, 0, canvasElt.clientWidth, canvasElt.clientHeight);
       colorsOutElt.innerHTML = '';
       for (let i = 0; i < colors.length; ++i) {
@@ -256,6 +278,22 @@ function detectGrid(lines, angleThreshold, distanceThreshold, minParallels) {
   return grid;
 }
 
+function gridToQuads(xLines, yLines) {
+  const points = Array(xLines.length);
+  for (const [i, xLine] of xLines.entries()) {
+    points[i] = Array(yLines.length);
+    for (const [j, yLine] of yLines.entries())
+      points[i][j] = intersect(xLine, yLine);
+  }
+  const quads = Array(xLines.length - 1);
+  for (let i = 0; i < xLines.length - 1; ++i) {
+    quads[i] = Array(yLines.length - 1)
+    for (let j = 0; j < yLines.length - 1; ++j)
+      quads[i][j] = [points[i][j], points[i][j + 1], points[i + 1][j + 1], points[i + 1][j]];
+  }
+  return quads;
+}
+
 function sampleGrid(input, grid, scaleFactor) {
   const {width, height} = input,
       colors = Array(grid[0].length - 1);
@@ -270,12 +308,12 @@ function sampleGrid(input, grid, scaleFactor) {
       const coordinates = [];
       for (const [index, parallels] of grid.entries()) {
         coordinates[index] = -1;
-        for (const [index2, lines] of Object.entries(parallels)) {
+        for (const [index2, lines] of parallels.entries()) {
           const angleVector = angleVectors[index][index2],
               d = angleVector[0] * y - angleVector[1] * x;
           // TODO: Fix inequality.
           if (d * scaleFactor < lines[1])
-            coordinates[index] = +index2;
+            coordinates[index] = index2;
         }
       }
       const [i, j] = coordinates;
@@ -303,6 +341,31 @@ function sampleGrid(input, grid, scaleFactor) {
   return colors.map(_ => _.map(_ => _[3]
       ? [Math.round(_[0] / _[3]), Math.round(_[1] / _[3]), Math.round(_[2] / _[3])]
       : undefined));
+}
+
+function intersect(line1, line2) {
+  const detInv = 1 / Math.sin(line2[0] - line1[0]);
+  return [
+    detInv * (Math.cos(line2[0]) * line1[1] - Math.cos(line1[0]) * line2[1]),
+    detInv * (Math.sin(line2[0]) * line1[1] - Math.sin(line1[0]) * line2[1]),
+  ];
+}
+
+function scale(points, factor) {
+  if (!points.length)
+    return;
+  const centroid = [0, 0];
+  for (const point of points) {
+    centroid[0] += point[0];
+    centroid[1] += point[1];
+  }
+  const a = (1 - factor) / points.length;
+  centroid[0] *= a;
+  centroid[1] *= a;
+  for (const point of points) {
+    point[0] = point[0] * factor + centroid[0];
+    point[1] = point[1] * factor + centroid[1];
+  }
 }
 
 function lineAverage(lines) {
@@ -352,6 +415,22 @@ function colorDistance(color1, color2) {
 
 function readPixel(bitmap, offset) {
   return [bitmap[offset], bitmap[offset + 1], bitmap[offset + 2]];
+}
+
+function rgbToHcl(red, green, blue) {
+  const min = Math.min(red, green, blue),
+      max = Math.max(red, green, blue),
+      chroma = max - min,
+      chroma6 = chroma * 6,
+      hue = (() => {
+        switch (max) {
+          case red:   const h = (green - blue) / chroma6; return h >= 0 ? h : h + 1;
+          case green: return (blue - red) / chroma6 + 1 / 3;
+          case blue:  return (red - green) / chroma6 + 2 / 3;
+        }
+      })(),
+      lightness = (min + max) / 2;
+  return [hue, chroma, lightness];
 }
 
 function hue(hue) {
@@ -435,7 +514,7 @@ function dump(value, short = false) {
       if (short)
         break;
       let hidden = new Set();
-      for (let object of protoChain) {
+      for (const object of protoChain) {
         const properties = Object.getOwnPropertyDescriptors(object);
         for (const key of Reflect.ownKeys(properties)) {
           if (hidden.has(key))
