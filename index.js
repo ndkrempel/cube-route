@@ -116,7 +116,7 @@ async(function *main() {
           for (let i = 1; i < quad.length; ++i)
             context3.lineTo(quad[i][0], quad[i][1]);
           context3.closePath();
-          const hue = samplePath(context3, frame2, clipBox(boundingBox(quad), frame2.width, frame2.height));
+          const hue = samplePath(context3, frame, clipBox(boundingBox(quad), frame.width, frame.height));
           context3.fillStyle = (() => {
             switch (hue) {
               case 'black': return 'black';
