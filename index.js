@@ -104,11 +104,10 @@ async(function *main() {
       const frame2 = context3.getImageData(0, 0, canvasElt3.clientWidth, canvasElt3.clientHeight);
       const colors = sampleGrid(frame2, grid, scaleFactor);
       context3.putImageData(frame2, 0, 0);
-      
-      console.log(quads, inView);
 
       if (inView) {
         quads.forEach(_ => _.forEach(quad => {
+          console.log(quad.join(' '));
           const scaleInv = 1 / scaleFactor;
           for (let i = 0; i < quad.length; ++i)
             quad[i][0] *= scaleInv, quad[i][1] *= scaleInv;
