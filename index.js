@@ -111,7 +111,7 @@ async(function *main() {
           const scaleInv = 1 / scaleFactor;
           for (let i = 0; i < quad.length; ++i)
             quad[i][0] *= scaleInv, quad[i][1] *= scaleInv;
-          scale(quad, 0.9);
+          quad = scale(quad, 0.9);
           context3.beginPath();
           context3.moveTo(quad[0][0], quad[0][1]);
           for (let i = 1; i < quad.length; ++i)
@@ -352,8 +352,9 @@ function intersect(line1, line2) {
 }
 
 function scale(points, factor) {
+  const result = [];
   if (!points.length)
-    return;
+    return result;
   const centroid = [0, 0];
   for (const point of points) {
     centroid[0] += point[0];
@@ -362,10 +363,12 @@ function scale(points, factor) {
   const a = (1 - factor) / points.length;
   centroid[0] *= a;
   centroid[1] *= a;
-  for (const point of points) {
-    point[0] = point[0] * factor + centroid[0];
-    point[1] = point[1] * factor + centroid[1];
-  }
+  for (const point of points)
+    result.push([
+      point[0] * factor + centroid[0],
+      point[1] * factor + centroid[1],
+    ]);
+  return result;
 }
 
 function lineAverage(lines) {
