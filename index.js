@@ -109,8 +109,9 @@ async(function *main() {
 
       if (inView) {
         quads.forEach(_ => _.forEach(quad => {
+          const scaleInv = 1 / scaleFactor;
           for (let i = 0; i < quad.length; ++i)
-            quad[i][0] *= scaleFactor, quad[i][1] *= scaleFactor;
+            quad[i][0] *= scaleInv, quad[i][1] *= scaleInv;
           scale(quad, 0.9);
           context3.beginPath();
           context3.moveTo(quad[0][0], quad[0][1]);
