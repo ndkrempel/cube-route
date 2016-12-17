@@ -73,7 +73,7 @@ async(function *main() {
     /*
     for (const [index, cluster] of clusters.entries())
       for (const line of cluster)
-        plotLine(line, 1, hue(index / clusters.length), 0.2);
+        plotLine(line, 1, hueToRgb(index / clusters.length), 0.2);
     */
     // const clusters2 = clusters.map(_ => _.reduce((a, b) => a[2] > b[2] ? a : b));
     const clusters2 = clusters.map(lineAverage);
@@ -84,7 +84,7 @@ async(function *main() {
     const endTime4 = performance.now();
     for (const [index, parallels] of grid.entries())
       for (const line of Object.values(parallels))
-        plotLine(line, 2, hue(index / grid.length));
+        plotLine(line, 2, hueToRgb(index / grid.length));
     if (grid.length === 2 && grid[0].length === 4 && grid[1].length === 4) {
       const quads = gridToQuads(grid[0], grid[1]),
           inView = quads.every(_ => _.every(_ => _.some(_ =>
@@ -111,13 +111,20 @@ async(function *main() {
           const scaleInv = 1 / scaleFactor;
           for (let i = 0; i < quad.length; ++i)
             quad[i][0] *= scaleInv, quad[i][1] *= scaleInv;
-          scale(quad, 0.9);
+          scale(quad, 0.8);
           context3.beginPath();
           context3.moveTo(quad[0][0], quad[0][1]);
           for (let i = 1; i < quad.length; ++i)
             context3.lineTo(quad[i][0], quad[i][1]);
           context3.closePath();
-          context3.fillStyle = 'black';
+          const hue = samplePath(context3, frame2, clipBox(boundingBox(quad), frame2.width, frame2.height));
+          context3.fillStyle = (() => {
+            switch (hue) {
+              case 'black': return 'black';
+              case 'white': return 'white';
+              default:      return `rgb(${hueToRgb(hue)},1)`;
+            }
+          })();
           context3.fill();
         }));
       }
@@ -299,6 +306,34 @@ function gridToQuads(xLines, yLines) {
   return quads;
 }
 
+function samplePath(context, input, boundingBox) {
+  const chromaThreshold = 0.2;
+  let count = 0, black = 0, white = 0, hues = [];
+  for (const [x, y, p] of getPathPixels(context, input, boundingBox)) {
+    const [hue, chroma, lightness] = rgbToHcl(p.map(_ => _ / 255));
+    if (chroma < chromaThreshold) {
+      if (lightness < 0.5)
+        ++black;
+      else
+        ++white;
+    } else
+      hues.push(hue);
+    ++count;
+  }
+  if (black >= count / 2)
+    return 'black';
+  if (white >= count / 2)
+    return 'white';
+  return angleAverage(hues.map(_ => _ * Math.PI * 2)) / (Math.PI * 2);
+}
+
+function *getPathPixels(context, input, boundingBox) {
+  for (let y = boundingBox[1]; y < boundingBox[3]; ++y)
+    for (let x = boundingBox[0], offset = y * input.width * 4 + x; x < boundingBox[2]; ++x, offset += 4)
+      if (context.isPointInPath(x, y))
+        yield [x, y, readPixel(input.data, offset)];
+}
+
 function sampleGrid(input, grid, scaleFactor) {
   const {width, height} = input,
       colors = Array(grid[0].length - 1);
@@ -337,7 +372,7 @@ function sampleGrid(input, grid, scaleFactor) {
       color[2] += input.data[offset + 2];
       ++color[3];
 
-      const foo = hue((j * (grid[0].length - 1) + i) / ((grid[0].length - 1) * (grid[1].length - 1)));
+      const foo = hueToRgb((j * (grid[0].length - 1) + i) / ((grid[0].length - 1) * (grid[1].length - 1)));
       input.data[offset] = foo[0];
       input.data[offset + 1] = foo[1];
       input.data[offset + 2] = foo[2];
@@ -371,6 +406,28 @@ function scale(points, factor) {
     point[0] = point[0] * factor + centroid[0];
     point[1] = point[1] * factor + centroid[1];
   }
+}
+
+function boundingBox(points) {
+  const xs = points.map(_ => _[0]),
+      ys = points.map(_ => _[1]);
+  return [
+    Math.min(...xs),
+    Math.min(...ys),
+    Math.max(...xs),
+    Math.max(...ys),
+  ];
+}
+
+function clipBox(box, width, height) {
+  if (box[0] >= width || box[1] >= height || box[2] < 0 || box[3] < 0)
+    return [Infinity, Infinity, -Infinity, -Infinity];
+  return [
+    Math.max(box[0], 0),
+    Math.max(box[1], 0),
+    Math.min(box[2], width),
+    Math.min(box[3], height),
+  ];
 }
 
 function lineAverage(lines) {
@@ -409,6 +466,24 @@ function lineDistance(line1, line2, scale = 100) {
   return Math.min(d1, d2);
 }
 
+function angleAverage(angles) {
+  if (Math.max(...angles) - Math.min(...angles) < Math.PI)
+    return average(angles);
+  const transformed = angles.map(_ => _ < Math.PI
+      ? _ + Math.PI
+      : _ - Math.PI),
+      result = average(transformed);
+  if (Math.max(...transformed) - Math.min(...transformed) >= Math.PI)
+    throw 'Wide average';
+  return result < Math.PI
+      ? result + Math.PI
+      : result - Math.PI;
+
+  function average(angles) {
+    return angles.reduce((a, b) => a + b, 0) / angles.length;
+  }
+}
+
 function angleDistance(angle1, angle2) {
   const d = Math.abs(angle1 - angle2);
   return d <= Math.PI / 2 ? d : Math.PI - d;
@@ -438,7 +513,7 @@ function rgbToHcl(red, green, blue) {
   return [hue, chroma, lightness];
 }
 
-function hue(hue) {
+function hueToRgb(hue) {
   hue = (hue % 1) * 6;
   const sextant = Math.floor(hue),
       t = Math.floor((hue - sextant) * 256);
