@@ -121,7 +121,7 @@ async(function *main() {
             switch (hue) {
               case 'black': return 'black';
               case 'white': return 'white';
-              default:      return `rgb(${hueToRgb(hue)},1)`;
+              default:      return `rgba(${hueToRgb(hue)},1)`;
             }
           })();
           context3.fill();
