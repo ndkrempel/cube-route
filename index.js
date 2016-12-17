@@ -107,7 +107,6 @@ async(function *main() {
 
       if (inView) {
         quads.forEach(_ => _.forEach(quad => {
-          console.log(quad.join(' '));
           const scaleInv = 1 / scaleFactor;
           for (let i = 0; i < quad.length; ++i)
             quad[i][0] *= scaleInv, quad[i][1] *= scaleInv;
@@ -320,6 +319,7 @@ function samplePath(context, input, boundingBox) {
       hues.push(hue);
     ++count;
   }
+  console.log(count, black, white, hues.length, angleAverage(hues.map(_ => _ * Math.PI * 2)) / (Math.PI * 2));
   if (black >= count / 2)
     return 'black';
   if (white >= count / 2)
