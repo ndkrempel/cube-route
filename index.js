@@ -415,10 +415,10 @@ function boundingBox(points) {
   const xs = points.map(_ => _[0]),
       ys = points.map(_ => _[1]);
   return [
-    Math.min(...xs),
-    Math.min(...ys),
-    Math.max(...xs),
-    Math.max(...ys),
+    Math.floor(Math.min(...xs)),
+    Math.floor(Math.min(...ys)),
+    Math.floor(Math.max(...xs)),
+    Math.floor(Math.max(...ys)),
   ];
 }
 
