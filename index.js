@@ -309,7 +309,7 @@ function samplePath(context, input, boundingBox) {
   const chromaThreshold = 0.2;
   let count = 0, black = 0, white = 0, hues = [];
   for (const [x, y, p] of getPathPixels(context, input, boundingBox)) {
-    const [hue, chroma, lightness] = rgbToHcl(p.map(_ => _ / 255));
+    const [hue, chroma, lightness] = rgbToHcl(...p.map(_ => _ / 255));
     if (chroma < chromaThreshold) {
       if (lightness < 0.5)
         ++black;
